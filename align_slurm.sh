@@ -27,6 +27,10 @@ MINIMAP2_CMD="minimap2"
 # Python for creating dotplot
 LOAD_PYTHON=""
 PYTHON_CMD="/gpfs0/apps/x86/anaconda3/bin/python"
+# iVar for primer removal
+LOAD_IVAR=""
+IVAR_CMD="/gpfs0/apps/x86_64/anaconda3/bin/ivar"
+
 
 ## Queues
 QUEUE="weka"
@@ -45,6 +49,9 @@ BETACORONA_SMALL="${PIPELINE_DIR}/betacoronaviruses/close/*/*.fasta \
 # Viral match - assumes only one directory under "match" 
 MATCH_REF="${PIPELINE_DIR}/betacoronaviruses/match/*/*.fasta"
 MATCH_NAME=$(echo $MATCH_REF | sed 's:.*/::' | rev | cut -c7- | rev )
+# Viral primers
+ARTIC_PRIMERS="${PIPELINE_DIR}/primers/artic_primers_v3.bed"
+
 
 # Usage and commands
 usageHelp="Usage: ${0##*/} [-d TOP_DIR] [-t THREADS] -jkrh"
@@ -187,29 +194,15 @@ then
 		else  
 			echo "(-: Mem align of ${ALIGNED_FILE}.sam done successfully"             
 		fi
-ALGNR`
-	    dependalign="afterok:$jid"
 
-            ######################################################################
-            ##########SAM: fixmate, sort
-            ######################################################################
-	    jid=`sbatch <<- SAMTOBAM | egrep -o -e "\b[0-9]+$"
-		#!/bin/bash -l
-		#SBATCH -p $QUEUE
-		#SBATCH -o ${WORK_DIR}/${REFERENCE_NAME}/debug/sam2bam-%j.out
-		#SBATCH -e ${WORK_DIR}/${REFERENCE_NAME}/debug/sam2bam-%j.err
-		#SBATCH -t 2880 
-		#SBATCH -n 1
-		#SBATCH -c $threads
-		#SBATCH --mem-per-cpu=4G
-		#SBATCH --threads-per-core=1
-		#SBATCH -d $dependalign
+                ###########################################################
+                ##########SAM: fixmate, sort
+                ###########################################################
 
 		$LOAD_SAMTOOLS
 		$SAMTOOLS_CMD fixmate -m $ALIGNED_FILE".sam" $ALIGNED_FILE".bam"
 		$SAMTOOLS_CMD sort -@ $threads -o $ALIGNED_FILE"_matefixd_sorted.bam" $ALIGNED_FILE".bam"
-
-SAMTOBAM`
+ALGNR`
 	    dependsort="${dependsort}:$jid"
 	done
     
@@ -231,17 +224,17 @@ SAMTOBAM`
 		$LOAD_SAMTOOLS 
 		if $SAMTOOLS_CMD merge ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged.bam ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_matefixd_sorted.bam
 		then
-			rm ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_matefixd_sorted.bam ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_mapped*
+			rm ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_mapped*
 		fi
 
 		if $SAMTOOLS_CMD markdup ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged.bam ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam
-		then
+		then 
 			rm ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged.bam
-		fi
-		
-		$SAMTOOLS_CMD depth -a ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam > ${WORK_DIR}/${REFERENCE_NAME}/aligned/depth_per_base.txt
-		$SAMTOOLS_CMD stats ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam | grep  ^SN | cut -f 2- > ${WORK_DIR}/${REFERENCE_NAME}/aligned/stats.txt
-MRKDUPS`
+		fi 
+		$IVAR_CMD trim -b $ARTIC_PRIMERS -p ${WORK_DIR}/${REFERENCE_NAME}/aligned/trimmed -i ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam -q 15 -m 50 -s 4 -e 
+		$SAMTOOLS_CMD depth -a ${WORK_DIR}/${REFERENCE_NAME}/aligned/trimmed.bam > ${WORK_DIR}/${REFERENCE_NAME}/aligned/depth_per_base.txt
+		$SAMTOOLS_CMD stats ${WORK_DIR}/${REFERENCE_NAME}/aligned/trimmed.bam | grep ^SN | cut -f 2- > ${WORK_DIR}/${REFERENCE_NAME}/aligned/stats.txt
+MRKDUPS` 
 	dependmerge="afterok:$jid"
 
 	if [[ "$REFERENCE" == *match* ]]
@@ -289,7 +282,8 @@ echo "#SBATCH --threads-per-core=1 " >> "$WORK_DIR"/collect_stats.sh
 echo "$slurm_depend_merge"  >> "$WORK_DIR"/collect_stats.sh 
 echo "echo \"label,percentage\" > $WORK_DIR/stats.csv " >> "$WORK_DIR"/collect_stats.sh
 echo "for f in $WORK_DIR/*/aligned/depth_per_base.txt; do"  >> "$WORK_DIR"/collect_stats.sh
-echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0; onisland=0}\$3>5{if (!onisland){onisland=1; island_start=\$2}}\$3<=5{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}} onisland=0}END{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}}  if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh 
+echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0}\$3>0{count++}END{if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh 
+#echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0; onisland=0}\$3>5{if (!onisland){onisland=1; island_start=\$2}}\$3<=5{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}} onisland=0}END{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}}  if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh 
 echo "	done "  >> "$WORK_DIR"/collect_stats.sh
 
 jid=`sbatch < "$WORK_DIR"/collect_stats.sh`
@@ -323,8 +317,8 @@ CONTIG`
 
 
 echo "CONTIG_LENGTH=\$(tail -n2 ${WORK_DIR}/contigs/log |grep -o 'total.*' | cut -f2 -d' ')" > ${WORK_DIR}/call_dotplot.sh
-echo "$PYTHON_CMD ${PIPELINE_DIR}/remove_strays.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base.txt ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base_without_primers_islands.txt" >> ${WORK_DIR}/call_dotplot.sh
-echo "$PYTHON_CMD ${PIPELINE_DIR}/dot_coverage.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base_without_primers_islands.txt ${FINAL_DIR}/contig.paf ${WORK_DIR}/stats.csv  \$CONTIG_LENGTH ${FINAL_DIR}/report " >> ${WORK_DIR}/call_dotplot.sh
+#echo "$PYTHON_CMD ${PIPELINE_DIR}/remove_strays.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base.txt ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base_without_primers_islands.txt" >> ${WORK_DIR}/call_dotplot.sh
+echo "$PYTHON_CMD ${PIPELINE_DIR}/dot_coverage.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base.txt ${FINAL_DIR}/contig.paf ${WORK_DIR}/stats.csv  \$CONTIG_LENGTH ${FINAL_DIR}/report " >> ${WORK_DIR}/call_dotplot.sh
 
 # need to wait for match alignment
 dependcontig="${dependmatchdone}:$jid"
@@ -334,7 +328,7 @@ dependcontig="${dependmatchdone}:$jid"
 ########## Minimap2 - after contig and alignment
 ######################################################################
 ######################################################################
-echo "depend contig $dependcontig"
+
 jid=`sbatch <<- MINIMAP | egrep -o -e "\b[0-9]+$"
 	#!/bin/bash -l
 	#SBATCH --partition=$QUEUE_X86 
