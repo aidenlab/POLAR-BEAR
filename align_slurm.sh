@@ -1,6 +1,6 @@
 #!/bin/bash
 ##### 
-### Polar pipeline script for viral diagnostic
+### POLAR BEAR pipeline script for viral diagnostic
 ### Given paired end sequencing of putative viral data
 ###   -> Aligns to a selection of potential viruses, sorts and merges
 ###   -> In parallel, assembles the data into contigs
@@ -289,7 +289,8 @@ echo "#SBATCH --threads-per-core=1 " >> "$WORK_DIR"/collect_stats.sh
 echo "$slurm_depend_merge"  >> "$WORK_DIR"/collect_stats.sh 
 echo "echo \"label,percentage\" > $WORK_DIR/stats.csv " >> "$WORK_DIR"/collect_stats.sh
 echo "for f in $WORK_DIR/*/aligned/depth_per_base.txt; do"  >> "$WORK_DIR"/collect_stats.sh
-echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0; onisland=0}\$3>5{if (!onisland){onisland=1; island_start=\$2}}\$3<=5{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}} onisland=0}END{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}}  if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh 
+echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0}\$3>1{count++}END{if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh
+#echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0; onisland=0}\$3>5{if (!onisland){onisland=1; island_start=\$2}}\$3<=5{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}} onisland=0}END{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}}  if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh 
 echo "	done "  >> "$WORK_DIR"/collect_stats.sh
 
 jid=`sbatch < "$WORK_DIR"/collect_stats.sh`
@@ -323,8 +324,8 @@ CONTIG`
 
 
 echo "CONTIG_LENGTH=\$(tail -n2 ${WORK_DIR}/contigs/log |grep -o 'total.*' | cut -f2 -d' ')" > ${WORK_DIR}/call_dotplot.sh
-echo "$PYTHON_CMD ${PIPELINE_DIR}/remove_strays.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base.txt ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base_without_primers_islands.txt" >> ${WORK_DIR}/call_dotplot.sh
-echo "$PYTHON_CMD ${PIPELINE_DIR}/dot_coverage.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base_without_primers_islands.txt ${FINAL_DIR}/contig.paf ${WORK_DIR}/stats.csv  \$CONTIG_LENGTH ${FINAL_DIR}/report " >> ${WORK_DIR}/call_dotplot.sh
+#echo "$PYTHON_CMD ${PIPELINE_DIR}/remove_strays.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base.txt ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base_without_primers_islands.txt" >> ${WORK_DIR}/call_dotplot.sh
+echo "$PYTHON_CMD ${PIPELINE_DIR}/dot_coverage.py ${WORK_DIR}/${MATCH_NAME}/aligned/depth_per_base.txt ${FINAL_DIR}/contig.paf ${WORK_DIR}/stats.csv  \$CONTIG_LENGTH ${FINAL_DIR}/report " >> ${WORK_DIR}/call_dotplot.sh
 
 # need to wait for match alignment
 dependcontig="${dependmatchdone}:$jid"
@@ -334,7 +335,6 @@ dependcontig="${dependmatchdone}:$jid"
 ########## Minimap2 - after contig and alignment
 ######################################################################
 ######################################################################
-echo "depend contig $dependcontig"
 jid=`sbatch <<- MINIMAP | egrep -o -e "\b[0-9]+$"
 	#!/bin/bash -l
 	#SBATCH --partition=$QUEUE_X86 
