@@ -39,9 +39,11 @@ threadstring="-t \$SLURM_JOB_CPUS_PER_NODE"
 ### VARIABLES: Automatically set
 TOP_DIR=$(pwd)
 PIPELINE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-BETACORONA_REF_DIR="${PIPELINE_DIR}/betacoronaviruses/*/*/*.fasta"
+BETACORONA_REF_DIR="${PIPELINE_DIR}/betacoronaviruses/*/*/*.fasta \
+                    ${PIPELINE_DIR}/control/*.fasta"
 BETACORONA_SMALL="${PIPELINE_DIR}/betacoronaviruses/close/*/*.fasta \
-		  ${PIPELINE_DIR}/betacoronaviruses/match/*/*.fasta" 
+		  ${PIPELINE_DIR}/betacoronaviruses/match/*/*.fasta \
+                  ${PIPELINE_DIR}/control/*.fasta" 
 # Viral match - assumes only one directory under "match" 
 MATCH_REF="${PIPELINE_DIR}/betacoronaviruses/match/*/*.fasta"
 MATCH_NAME=$(echo $MATCH_REF | sed 's:.*/::' | rev | cut -c7- | rev )
@@ -251,6 +253,7 @@ MRKDUPS`
 	    dependmatchdone="afterok:$jid"
 	fi
 
+	echo $produceIndex
 	if [ -n "$produceIndex" ]
 	then
 	    jid=`sbatch <<- INDEXSAM | egrep -o -e "\b[0-9]+$"
@@ -289,8 +292,9 @@ echo "#SBATCH --threads-per-core=1 " >> "$WORK_DIR"/collect_stats.sh
 echo "$slurm_depend_merge"  >> "$WORK_DIR"/collect_stats.sh 
 echo "echo \"label,percentage\" > $WORK_DIR/stats.csv " >> "$WORK_DIR"/collect_stats.sh
 echo "for f in $WORK_DIR/*/aligned/depth_per_base.txt; do"  >> "$WORK_DIR"/collect_stats.sh
+echo "if [[ ! \"$f\" == *\"$control\"* ]]; then" >> "$WORK_DIR"/collect_stats.sh 
 echo  "awk -v fname=\$(basename \${f%%/aligned*}) 'BEGIN{count=0; onisland=0}\$3>5{if (!onisland){onisland=1; island_start=\$2}}\$3<=5{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}} onisland=0}END{if (onisland){island_end=\$2; if (island_end-island_start>=50){count=count+island_end-island_start}}  if (NR==0){NR=1} printf(\"%s,%0.02f\n\", fname, count*100/NR)}' \$f >> ${WORK_DIR}/stats.csv"  >> "$WORK_DIR"/collect_stats.sh 
-echo "	done "  >> "$WORK_DIR"/collect_stats.sh
+echo "fi;	done "  >> "$WORK_DIR"/collect_stats.sh
 
 jid=`sbatch < "$WORK_DIR"/collect_stats.sh`
 
