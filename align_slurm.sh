@@ -253,7 +253,6 @@ MRKDUPS`
 	    dependmatchdone="afterok:$jid"
 	fi
 
-	echo $produceIndex
 	if [ -n "$produceIndex" ]
 	then
 	    jid=`sbatch <<- INDEXSAM | egrep -o -e "\b[0-9]+$"
@@ -269,7 +268,7 @@ MRKDUPS`
 	#SBATCH -d $dependmerge
 
 	$LOAD_SAMTOOLS
-	$SAMTOOLS_CMD index ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged.bam
+	$SAMTOOLS_CMD index ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam
 
 INDEXSAM`
 	fi
