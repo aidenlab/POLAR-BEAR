@@ -338,7 +338,6 @@ dependcontig="${dependmatchdone}:$jid"
 ########## Minimap2 - after contig and alignment
 ######################################################################
 ######################################################################
-echo "depend contig $dependcontig"
 jid=`sbatch <<- MINIMAP | egrep -o -e "\b[0-9]+$"
 	#!/bin/bash -l
 	#SBATCH --partition=$QUEUE_X86 
