@@ -233,7 +233,7 @@ SAMTOBAM`
 		$LOAD_SAMTOOLS 
 		if $SAMTOOLS_CMD merge ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged.bam ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_matefixd_sorted.bam
 		then
-			rm ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_matefixd_sorted.bam ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_mapped*
+			rm ${WORK_DIR}/${REFERENCE_NAME}/aligned/*_mapped*
 		fi
 
 		if $SAMTOOLS_CMD markdup ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged.bam ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam
@@ -243,6 +243,10 @@ SAMTOBAM`
 		
 		$SAMTOOLS_CMD depth -a ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam > ${WORK_DIR}/${REFERENCE_NAME}/aligned/depth_per_base.txt
 		$SAMTOOLS_CMD stats ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam | grep  ^SN | cut -f 2- > ${WORK_DIR}/${REFERENCE_NAME}/aligned/stats.txt
+		if [ -n "$produceIndex" ]
+		then
+			$SAMTOOLS_CMD index ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam
+		fi
 MRKDUPS`
 	dependmerge="afterok:$jid"
 
@@ -251,26 +255,6 @@ MRKDUPS`
 	    MATCH_REF=${REFERENCE}
 	    MATCH_NAME=${REFERENCE_NAME}
 	    dependmatchdone="afterok:$jid"
-	fi
-
-	if [ -n "$produceIndex" ]
-	then
-	    jid=`sbatch <<- INDEXSAM | egrep -o -e "\b[0-9]+$"
-	#!/bin/bash -l
-	#SBATCH -p $QUEUE
-	#SBATCH -o ${WORK_DIR}/${REFERENCE_NAME}/debug/indexsam-%j.out
-	#SBATCH -e ${WORK_DIR}/${REFERENCE_NAME}/debug/indexsam-%j.err
-	#SBATCH -t 2880 
-	#SBATCH -n 1 
-	#SBATCH -c 1
-	#SBATCH --mem-per-cpu=10G
-	#SBATCH --threads-per-core=1 
-	#SBATCH -d $dependmerge
-
-	$LOAD_SAMTOOLS
-	$SAMTOOLS_CMD index ${WORK_DIR}/${REFERENCE_NAME}/aligned/sorted_merged_dups_marked.bam
-
-INDEXSAM`
 	fi
     done
     slurm_depend_merge="#SBATCH -d $dependmerge"
